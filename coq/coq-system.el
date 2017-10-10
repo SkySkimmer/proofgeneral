@@ -80,6 +80,12 @@ variable should contain nil or a version string."
   :type 'string
   :group 'coq)
 
+(defcustom coq-prog-name-from-coqproject nil
+  "Enable setting `coq-prog-name' from 'COQTOP =' in _CoqProject.
+May have security implications especially with `proof-prog-name-ask' unset."
+  :type 'boolean
+  :group 'coq)
+
 (defvar coq-autodetected-version nil
   "Version of Coq, as autodetected by `coq-autodetect-version'.")
 
@@ -454,6 +460,7 @@ alreadyopen is t if buffer already existed."
 (defconst coq--makefile-switch-arities
   '(("-R" . 2)
     ("-Q" . 2)
+    ("COQTOP" . 2) ; takes = then the value
     ("-I" . 1)
     ("-arg" . 1)
     ("-opt" . 0)
@@ -481,6 +488,17 @@ Returns a mixed list of option-value pairs and strings."
         (push (coq--read-one-option-from-project-file switch arity raw-args) options)
         (setq raw-args (nthcdr (or arity 0) raw-args))))
     options))
+
+(defun coq--extract-prog-name (options base-dir)
+  "Read `coq-prog-name' from _CoqProject options OPTIONS.
+OPTIONS is a list or conses (switch . arguments) and strings.
+Paths are taken relative to BASE-DIRECTORY."
+  (let ((res nil))
+    (dolist (opt options)
+      (pcase opt
+        (`("COQTOP" "=" ,coqtop)
+         (setq res (expand-file-name coqtop base-dir)))))
+    (when res (setq coq-prog-name res))))
 
 (defun coq--extract-prog-args (options)
   "Extract coqtop arguments from _CoqProject options OPTIONS.
@@ -531,6 +549,7 @@ variable."
              (proj-file-dir (file-name-directory proj-file-name)))
         (unless avoidargs (setq coq-prog-args (coq--extract-prog-args options)))
         (unless avoidpath (setq coq-load-path (coq--extract-load-path options proj-file-dir)))
+        (when coq-prog-name-from-coqproject (coq--extract-prog-name options proj-file-dir))
         (let ((msg
                (cond
                 ((and avoidpath avoidargs) "Coqtop args and load path")
